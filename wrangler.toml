@@ -15,7 +15,7 @@ rules = [
 
 [[routes]]
 # Refer to https://developers.cloudflare.com/workers/wrangler/configuration/#routes
-pattern = "shz.al"
+pattern = "tf.281000.xyz"
 custom_domain = true
 
 [[kv_namespaces]]
