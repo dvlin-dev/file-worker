@@ -15,33 +15,48 @@ async function handleRequest(request, env, ctx) {
   try {
     if (request.method === "OPTIONS") {
       return handleOptions(request)
-    } else {
-      const response = await handleNormalRequest(request, env, ctx)
-      if (response.status !== 302 && response.headers !== undefined) {  // because Cloudflare do not allow modifying redirect headers
-        response.headers.set("Access-Control-Allow-Origin", "*")
-      }
-      return response
     }
+    
+    const response = await handleNormalRequest(request, env, ctx)
+    if (!isRedirect(response) && response.headers) {
+      response.headers.set("Access-Control-Allow-Origin", "*")
+    }
+    return response
+    
   } catch (e) {
-    if (e instanceof WorkerError) {
-      return corsWrapResponse(new Response(`Error ${e.statusCode}: ${e.message}\n`, { status: e.statusCode }))
-    } else {
-      console.log(e.stack)
-      return corsWrapResponse(new Response(`Error 500: ${e.message}\n`, { status: 500 }))
-    }
+    return handleError(e)
   }
 }
 
+function handleError(e) {
+  if (e instanceof WorkerError) {
+    return corsWrapResponse(
+      new Response(`Error ${e.statusCode}: ${e.message}\n`, 
+      { status: e.statusCode })
+    )
+  }
+  console.log(e.stack)
+  return corsWrapResponse(
+    new Response(`Error 500: ${e.message}\n`, 
+    { status: 500 })
+  )
+}
+
+const requestHandlers = new Map([
+  ['POST', (req, env, ctx) => handlePostOrPut(req, env, ctx, false)],
+  ['GET', handleGet],
+  ['DELETE', handleDelete],
+  ['PUT', (req, env, ctx) => handlePostOrPut(req, env, ctx, true)]
+])
+
 async function handleNormalRequest(request, env, ctx) {
-  if (request.method === "POST") {
-    return await handlePostOrPut(request, env, ctx, false)
-  } else if (request.method === "GET") {
-    return await handleGet(request, env, ctx)
-  } else if (request.method === "DELETE") {
-    return await handleDelete(request, env, ctx)
-  } else if (request.method === "PUT") {
-    return await handlePostOrPut(request, env, ctx, true)
-  } else {
+  const handler = requestHandlers.get(request.method)
+  if (!handler) {
     throw new WorkerError(405, "method not allowed")
   }
+  return handler(request, env, ctx)
+}
+
+function isRedirect(response) {
+  return response.status === 302
 }
